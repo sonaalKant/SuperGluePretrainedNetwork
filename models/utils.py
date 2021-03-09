@@ -259,6 +259,8 @@ def process_resize(w, h, resize):
 def frame2tensor(frame, device):
     return torch.from_numpy(frame/255.).float()[None, None].to(device)
 
+def array2tensor(data, device):
+    return torch.from_numpy(data).float()[None].to(device)
 
 def read_image(path, device, resize, rotation, resize_float):
     image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
