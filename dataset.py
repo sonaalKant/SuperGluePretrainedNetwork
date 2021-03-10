@@ -12,6 +12,8 @@ import os
 import cv2
 import math
 import datetime
+import random
+import glob
 
 # from scipy.spatial.distance import cdist
 from torch.utils.data import Dataset
@@ -101,22 +103,45 @@ class SuperPointDataset(Dataset):
             cv2.imwrite('keypoints0.jpg', outimg)
             outimg = cv2.drawKeypoints(image_warped, kps1cv, outimg)
             cv2.imwrite('keypoints1.jpg', outimg)
-
+        
         return {
-            'keypoints0': kps0.unsqueeze(0),
-            'keypoints1': kps1_filtered,
-            'descriptors0': list(desc0),
-            'descriptors1': list(desc1[0]),
-            'scores0': list(scores0),
-            'scores1': list(scores1[0]),
+            'keypoints0': kps0,
+            'keypoints1': kps1_filtered[0],
+            'descriptors0': desc0,
+            'descriptors1': desc1[0],
+            'scores0': scores0,
+            'scores1': scores1[0],
             'image0': data.squeeze(0),
             'image1': data_warped.squeeze(0),
             'all_matches': all_matches,
             'file_name': self.image_names[idx],
+            'homography' : M
         }
 
 
+def split_paris_oxford_dataset():
+    
+    def write_to_txt(my_list, name):
+        with open(name, 'w') as f:
+            for item in my_list:
+                f.write("%s\n" % item)
+
+    all_imnames = glob.glob("datasets/*/jpg/*.jpg")
+    random.shuffle(all_imnames)
+
+    train = all_imnames[:int(0.6*len(all_imnames))]
+    val = all_imnames[int(0.6*len(all_imnames)) : int(0.8*len(all_imnames))]
+    test = all_imnames[int(0.8*len(all_imnames)) : ]
+
+    print(f"ALL : {len(all_imnames)}, TRAIN : {len(train)}, VAL : {len(val)}, TEST : {len(test)}")
+
+    write_to_txt(train, 'datasets/train.txt')
+    write_to_txt(val, 'datasets/val.txt')
+    write_to_txt(test, 'datasets/test.txt')
+
 if __name__ == '__main__':
+
+    split_paris_oxford_dataset()
 
     config = {
             'nms_radius': 4,
