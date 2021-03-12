@@ -76,20 +76,20 @@ def compute_homography(data, keep_k_points=1000, correctness_thresh=3, orb=False
     if H is None:
         correctness = 0
         H = np.identity(3)
-        print("no valid estimation")
+        # print("no valid estimation")
     else:
         corners = np.array([[0, 0, 1],
                             [0, shape[0] - 1, 1],
                             [shape[1] - 1, 0, 1],
                             [shape[1] - 1, shape[0] - 1, 1]])
-        print("corner: ", corners)
+        # print("corner: ", corners)
         real_warped_corners = np.dot(corners, np.transpose(real_H))
         real_warped_corners = real_warped_corners[:, :2] / real_warped_corners[:, 2:]
-        print("real_warped_corners: ", real_warped_corners)
+        # print("real_warped_corners: ", real_warped_corners)
         
         warped_corners = np.dot(corners, np.transpose(H))
         warped_corners = warped_corners[:, :2] / warped_corners[:, 2:]
-        print("warped_corners: ", warped_corners)
+        # print("warped_corners: ", warped_corners)
         
         mean_dist = np.mean(np.linalg.norm(real_warped_corners - warped_corners, axis=1))
         correctness = mean_dist <= correctness_thresh

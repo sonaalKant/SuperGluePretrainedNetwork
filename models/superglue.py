@@ -116,7 +116,8 @@ class AttentionalPropagation(nn.Module):
 
     def forward(self, x, source):
         message = self.attn(x, source, source)
-        return self.mlp(torch.cat([x, message], dim=1))
+        out = self.mlp(torch.cat([x, message], dim=1))
+        return out
 
 
 class AttentionalGNN(nn.Module):
@@ -237,6 +238,7 @@ class SuperGlue(nn.Module):
                 'matches1': kpts1.new_full(shape1, -1, dtype=torch.int),
                 'matching_scores0': kpts0.new_zeros(shape0),
                 'matching_scores1': kpts1.new_zeros(shape1),
+                'skip_train' : True
             }
 
         # Keypoint normalization.
@@ -275,9 +277,30 @@ class SuperGlue(nn.Module):
         indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
+        '''
+        LOSS FUNCTION :
+            -log(scores.exp()) == scores
+        '''
+        all_matches = torch.cat(data['all_matches']).transpose(0,1)
+        loss = []
+        for i in range(len(all_matches)):
+            x = all_matches[i][0]
+            y = all_matches[i][1]
+            loss.append( -scores[0,x,y] )
+        
+        for i in range(kpts0.shape[1]):
+            loss.append( -scores[0,i,-1] )
+            
+        for i in range(kpts1.shape[1]):
+            loss.append( -scores[0,-1,i] )
+
+        loss = torch.stack(loss).mean()
+
         return {
             'matches0': indices0, # use -1 for invalid match
             'matches1': indices1, # use -1 for invalid match
             'matching_scores0': mscores0,
             'matching_scores1': mscores1,
+            'loss' : loss,
+            'skip_train' : False
         }
