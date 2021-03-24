@@ -28,6 +28,8 @@ from models.utils import (compute_pose_error, compute_epipolar_error,
 
 from models.superpoint import SuperPoint
 from models.superglue import SuperGlue
+from test import validation
+import wandb
 
 torch.set_grad_enabled(True)
 torch.multiprocessing.set_sharing_strategy('file_system')
@@ -45,6 +47,9 @@ parser = argparse.ArgumentParser(
     description='Image pair matching and pose evaluation with SuperGlue',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+parser.add_argument(
+    '--exp_name', type=str,  
+    help='name_of_the_experiment')
 parser.add_argument(
     '--viz', action='store_true',
     help='Visualize the matches and dump the plots')
@@ -183,13 +188,15 @@ if __name__ == '__main__':
 
     # Set data loader
     if opt.detector == 'superpoint':
-        train_set = SuperPointDataset("", image_list='datasets/train.txt', device='cuda')
+        train_set = SuperPointDataset("", image_list='datasets/train.txt', device='cuda', max_keypoints=opt.max_keypoints)
     else:
         RuntimeError('Error detector : {}'.format(opt.detector))
 
     train_loader = torch.utils.data.DataLoader(dataset=train_set, shuffle=False, batch_size=opt.batch_size, drop_last=True)
 
     superglue = SuperGlue(config.get('superglue', {}))
+    superglue.load_state_dict(torch.load("models/weights/superglue_outdoor.pth"))
+
     if torch.cuda.is_available():
         superglue.cuda()
     else:
@@ -203,6 +210,7 @@ if __name__ == '__main__':
         superglue.train()
         # train_loader = tqdm(train_loader)
         for i, data in enumerate(train_loader):
+            data['is_train'] = True
             pred = superglue(data)
             pred = {**pred, **data}
 
@@ -213,13 +221,9 @@ if __name__ == '__main__':
             Loss = pred['loss']
             epoch_loss += Loss.item()
             mean_loss.append(Loss.item()) 
-            Loss.backward()
-            optimizer.step()
+            # Loss.backward()
+            # optimizer.step()
 
-            # for param in superglue.parameters():
-            #     print(param.grad.shape)
-
-            print(i, data['keypoints0'].shape, data['keypoints1'].shape, Loss.item())
             torch.cuda.empty_cache()
 
             if (i+1) % 100 == 0:
@@ -227,39 +231,32 @@ if __name__ == '__main__':
                     .format(epoch, opt.epoch, i+1, len(train_loader), np.mean(mean_loss)))   # Loss.item()    
                 mean_loss = []
 
-                ### eval ###
                 # Visualize the matches.
-        #         superglue.eval()
-        #         image0, image1 = pred['image0'].cpu().numpy()[0]*255., pred['image1'].cpu().numpy()[0]*255.
-        #         kpts0, kpts1 = pred['keypoints0'].cpu().numpy()[0], pred['keypoints1'].cpu().numpy()[0]
-        #         matches, conf = pred['matches0'].cpu().detach().numpy(), pred['matching_scores0'].cpu().detach().numpy()
-        #         image0 = read_image_modified(image0, opt.resize, opt.resize_float)
-        #         image1 = read_image_modified(image1, opt.resize, opt.resize_float)
-        #         valid = matches > -1
-        #         mkpts0 = kpts0[valid]
-        #         mkpts1 = kpts1[matches[valid]]
-        #         mconf = conf[valid]
-        #         viz_path = eval_output_dir / '{}_matches.{}'.format(str(i), opt.viz_extension)
-        #         color = cm.jet(mconf)
-        #         stem = pred['file_name']
-        #         text = []
+                image0, image1 = pred['image0'].cpu().numpy()[0]*255., pred['image1'].cpu().numpy()[0]*255.
+                kpts0, kpts1 = pred['keypoints0'].cpu().numpy()[0], pred['keypoints1'].cpu().numpy()[0]
+                matches, conf = pred['matches0'].cpu().detach().numpy()[0], pred['matching_scores0'].cpu().detach().numpy()[0]
+                valid = matches > -1
+                mkpts0 = kpts0[valid]
+                mkpts1 = kpts1[matches[valid]]
+                mconf = conf[valid]
+                viz_path = eval_output_dir / '{}_matches.{}'.format(str(i), opt.viz_extension)
+                color = cm.jet(mconf)
+                stem = pred['file_name']
+                text = []
 
-        #         make_matching_plot(
-        #             image0, image1, kpts0, kpts1, mkpts0, mkpts1, color,
-        #             text, viz_path, stem, stem, opt.show_keypoints,
-        #             opt.fast_viz, opt.opencv_display, 'Matches')
+                out = make_matching_plot(image0, image1, kpts0, kpts1, mkpts0, mkpts1, color, text, viz_path, stem, opt.show_keypoints,opt.fast_viz, opt.opencv_display, 'Matches')
 
+        ### eval ###
+        superglue.eval()
+        homogrpahy_auc = validation(superglue, 'datasets/val.txt')
 
-        #     if (i+1) % 5e3 == 0:
-        #         model_out_path = "exp/model_epoch_{}.pth".format(epoch)
-        #         torch.save(superglue, model_out_path)
-        #         print ('Epoch [{}/{}], Step [{}/{}], Checkpoint saved to {}' 
-        #             .format(epoch, opt.epoch, i+1, len(train_loader), model_out_path)) 
+        epoch_loss /= len(train_loader)
 
+        if not os.path.isdir("exp"):
+            os.makedirs("exp")
 
-        # epoch_loss /= len(train_loader)
-        # model_out_path = "exp/model_epoch_{}.pth".format(epoch)
-        # torch.save(superglue, model_out_path)
-        # print("Epoch [{}/{}] done. Epoch Loss {}. Checkpoint saved to {}"
-        #     .format(epoch, opt.epoch, epoch_loss, model_out_path))
+        model_out_path = "exp/model_epoch_{}_{}.pth".format(epoch, homogrpahy_auc)
+        torch.save(superglue, model_out_path)
+        print("Epoch [{}/{}] done. Epoch Loss {}. Checkpoint saved to {}"
+            .format(epoch, opt.epoch, epoch_loss, model_out_path))
         

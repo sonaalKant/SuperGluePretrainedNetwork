@@ -69,12 +69,26 @@ def compute_homography(data, keep_k_points=1000, correctness_thresh=3, orb=False
     valid = matches > -1
     m_keypoints = m_keypoints[valid]
     m_warped_keypoints = m_warped_keypoints[matches[valid]]
+
+    if len(m_keypoints) == 0:
+        correctness = 0
+        mean_dist = 999
+        H = np.identity(3)
+        return {'correctness': correctness,
+            'homography': H,
+            'mean_dist': mean_dist
+            }
+            
     # Estimate the homography between the matches using RANSAC
-    H, inliers = cv2.findHomography(m_keypoints[:, :, :], m_warped_keypoints[:, :, :], cv2.RANSAC)
+    try:
+        H, inliers = cv2.findHomography(m_keypoints[:, :, :], m_warped_keypoints[:, :, :], cv2.RANSAC)
+    except:
+        import pdb;pdb.set_trace()
                                     
     # Compute correctness
     if H is None:
         correctness = 0
+        mean_dist = 999
         H = np.identity(3)
         # print("no valid estimation")
     else:
@@ -93,8 +107,15 @@ def compute_homography(data, keep_k_points=1000, correctness_thresh=3, orb=False
         
         mean_dist = np.mean(np.linalg.norm(real_warped_corners - warped_corners, axis=1))
         correctness = mean_dist <= correctness_thresh
+
+        # CALCULATE PRECISON AND RECALL
+        FP = TP = FN = 0.
+        
     
     return {'correctness': correctness,
             'homography': H,
-            'mean_dist': mean_dist
+            'mean_dist': mean_dist,
+            'FP' : FP,
+            'TP' : TP,
+            'FN' : FN,
             }

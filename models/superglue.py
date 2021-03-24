@@ -281,20 +281,23 @@ class SuperGlue(nn.Module):
         LOSS FUNCTION :
             -log(scores.exp()) == scores
         '''
-        all_matches = torch.cat(data['all_matches']).transpose(0,1)
-        loss = []
-        for i in range(len(all_matches)):
-            x = all_matches[i][0]
-            y = all_matches[i][1]
-            loss.append( -scores[0,x,y] )
-        
-        for i in range(kpts0.shape[1]):
-            loss.append( -scores[0,i,-1] )
+        if data['is_train']:
+            all_matches = torch.cat(data['all_matches']).transpose(0,1)
+            loss = []
+            for i in range(len(all_matches)):
+                x = all_matches[i][0]
+                y = all_matches[i][1]
+                loss.append( -scores[0,x,y] )
             
-        for i in range(kpts1.shape[1]):
-            loss.append( -scores[0,-1,i] )
+            for i in range(kpts0.shape[1]):
+                loss.append( -scores[0,i,-1] )
+                
+            for i in range(kpts1.shape[1]):
+                loss.append( -scores[0,-1,i] )
 
-        loss = torch.stack(loss).mean()
+            loss = torch.stack(loss).mean()
+        else:
+            loss = torch.zeros(1)
 
         return {
             'matches0': indices0, # use -1 for invalid match
